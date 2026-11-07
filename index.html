@@ -7,11 +7,16 @@
 <style>
   html, body { margin: 0; height: 100%; background: #fff; font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-  .bar { width: min(96vw, calc(100vh - 150px)); display: flex; align-items: center; justify-content: space-between; }
-  canvas { background: #fff; border: 4px solid #000; box-sizing: border-box; width: min(96vw, calc(100vh - 150px)); height: auto; aspect-ratio: 1 / 1; }
+  .bar { width: min(96vw, calc(100vh - 220px)); display: flex; align-items: center; justify-content: space-between; }
+  canvas { background: #fff; border: 4px solid #000; box-sizing: border-box; width: min(96vw, calc(100vh - 220px)); height: auto; aspect-ratio: 1 / 1; }
   button { font-size: 18px; font-weight: bold; padding: 10px 18px; border: 2px solid #000; border-radius: 8px; background: #fff; color: #000; cursor: pointer; }
   button:hover:not(:disabled) { background: #000; color: #fff; }
   button:disabled { opacity: .35; cursor: not-allowed; }
+  #recStatus { font-size: 16px; font-weight: bold; color: #000; }
+  #recStatus.recording { color: #e11; }
+  #overlay { position: fixed; inset: 0; background: rgba(255,255,255,.97); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; z-index: 10; }
+  #overlay[hidden] { display: none; }
+  #replayVideo { max-width: 96vw; max-height: calc(100vh - 100px); border: 4px solid #000; background: #fff; }
   #timer { font-size: 28px; font-weight: bold; font-variant-numeric: tabular-nums; color: #000; }
 </style>
 </head>
@@ -22,8 +27,20 @@
 </div>
 <canvas id="arena" width="1600" height="1600"></canvas>
 <div class="bar">
+  <span id="recStatus">전투가 끝나면 경기 영상을 저장할 수 있어요</span>
+  <span>
+    <button id="replayBtn" disabled>▶ 다시보기</button>
+    <button id="downloadBtn" disabled>⬇ 다운로드</button>
+  </span>
+</div>
+<div class="bar">
   <button id="addLeft">◀ 으아라아 추가</button>
   <button id="addRight">으아라아 추가 ▶</button>
+</div>
+
+<div id="overlay" hidden>
+  <button id="closeOverlay">✕ 닫기</button>
+  <video id="replayVideo" controls playsinline></video>
 </div>
 
 <script>
@@ -67,6 +84,12 @@ const startBtn = document.getElementById("startBtn");
 const timerEl = document.getElementById("timer");
 const addLeft = document.getElementById("addLeft");
 const addRight = document.getElementById("addRight");
+const recStatus = document.getElementById("recStatus");
+const replayBtn = document.getElementById("replayBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const overlay = document.getElementById("overlay");
+const closeOverlay = document.getElementById("closeOverlay");
+const replayVideo = document.getElementById("replayVideo");
 
 const img = new Image();
 let imgLoaded = false;
@@ -92,6 +115,8 @@ function reset() {
   chars = []; effects = []; floaters = [];
   nextId = 1; peak = 0; time = 0; shake = 0;
   running = false; over = false; winner = null;
+  stopRecording(true);
+  clearReplay();
   syncUI();
 }
 
@@ -256,6 +281,7 @@ function step(dt) {
     over = true;
     winner = chars[0] || null;
     syncUI();
+    onOver();
   }
 }
 
@@ -392,10 +418,90 @@ function fmt(t) {
   return String(m).padStart(2, "0") + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
 }
 
+// ===== 경기 영상 녹화 / 다시보기 / 다운로드 =====
+let rec = null, recChunks = [], recExt = "mp4", recUrl = null, recTimer = null;
+
+// MP4를 우선 사용하고, 지원하지 않는 브라우저(예: 파이어폭스)는 WEBM으로 대체
+function pickMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const list = ["video/mp4;codecs=avc1.42E01E", "video/mp4;codecs=avc1", "video/mp4",
+                "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  return list.find(m => MediaRecorder.isTypeSupported(m)) || "";
+}
+
+function setStatus(text, recording) {
+  recStatus.textContent = text;
+  recStatus.className = recording ? "recording" : "";
+}
+
+function startRecording() {
+  const mime = pickMime();
+  if (!mime || !canvas.captureStream) { setStatus("이 브라우저는 영상 녹화를 지원하지 않아요", false); return; }
+  recChunks = [];
+  recExt = mime.startsWith("video/mp4") ? "mp4" : "webm";
+  try {
+    rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 6000000 });
+  } catch (e) { rec = null; setStatus("영상 녹화를 시작하지 못했어요", false); return; }
+  rec.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  rec.start(1000);
+  setStatus("● 녹화 중", true);
+}
+
+function stopRecording(discard) {
+  clearTimeout(recTimer);
+  const r = rec;
+  if (!r) return;
+  rec = null;
+  r.onstop = () => {
+    if (discard) return;
+    const blob = new Blob(recChunks, { type: r.mimeType.split(";")[0] });
+    recUrl = URL.createObjectURL(blob);
+    downloadBtn.textContent = "⬇ 다운로드 (" + recExt.toUpperCase() + ")";
+    replayBtn.disabled = downloadBtn.disabled = false;
+    setStatus("경기 영상이 준비됐어요", false);
+  };
+  if (r.state !== "inactive") r.stop();
+}
+
+// 전투가 끝난 뒤 승리 화면까지 잠깐 더 녹화하고 마무리
+function onOver() {
+  if (!rec) return;
+  setStatus("영상 저장 중...", true);
+  recTimer = setTimeout(() => stopRecording(false), 2500);
+}
+
+function clearReplay() {
+  if (recUrl) { URL.revokeObjectURL(recUrl); recUrl = null; }
+  replayBtn.disabled = downloadBtn.disabled = true;
+  downloadBtn.textContent = "⬇ 다운로드";
+  overlay.hidden = true;
+  setStatus("전투가 끝나면 경기 영상을 저장할 수 있어요", false);
+}
+
+replayBtn.addEventListener("click", () => {
+  if (!recUrl) return;
+  replayVideo.src = recUrl;
+  overlay.hidden = false;
+  replayVideo.play();
+});
+closeOverlay.addEventListener("click", () => {
+  replayVideo.pause();
+  overlay.hidden = true;
+});
+downloadBtn.addEventListener("click", () => {
+  if (!recUrl) return;
+  const a = document.createElement("a");
+  a.href = recUrl;
+  a.download = "공싸움-" + Date.now() + "." + recExt;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
 // ===== 버튼 =====
 startBtn.addEventListener("click", () => {
   if (running) reset();
-  else { running = true; syncUI(); }
+  else { running = true; syncUI(); startRecording(); }
 });
 addLeft.addEventListener("click", () => spawn("euaraa", "left"));
 addRight.addEventListener("click", () => spawn("euaraa", "right"));
