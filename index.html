@@ -10,24 +10,24 @@
 </style>
 </head>
 <body>
-<canvas id="arena" width="800" height="800"></canvas>
+<canvas id="arena" width="2400" height="2400"></canvas>
 
 <script>
 // ===== 설정 =====
 const CONFIG = {
-  arenaSize: 800,        // 정사각형 경기장 한 변 (px)
+  arenaSize: 2400,       // 정사각형 경기장 한 변 (px)
   gravity: 1800,         // 중력 (px/s^2)
   bounceHeight: 450,     // 바닥에서 튕겨 오르는 높이 (px) - 항상 일정
-  ballRadius: 40,
+  boxW: 444,             // 네모 공 가로 (이미지 크기)
+  boxH: 311,             // 네모 공 세로 (이미지 크기)
   startSpeedX: 300,      // 시작 가로 속도 (px/s)
-  imageSrc: "ball.png",  // 나중에 쓸 이미지 파일. 없으면 색깔 공으로 표시됨
+  imageSrc: "ball.webp", // 공 이미지
 };
 
 const canvas = document.getElementById("arena");
 const ctx = canvas.getContext("2d");
 canvas.width = canvas.height = CONFIG.arenaSize;
 
-// 공 이미지 (없어도 동작)
 const img = new Image();
 let imgLoaded = false;
 img.onload = () => { imgLoaded = true; };
@@ -36,51 +36,46 @@ img.src = CONFIG.imageSrc;
 // 바닥에서 튕길 때의 고정 속도: v = sqrt(2 * g * h)  -> 매번 같은 높이까지 올라감
 const BOUNCE_SPEED = Math.sqrt(2 * CONFIG.gravity * CONFIG.bounceHeight);
 
-const ball = {
-  x: CONFIG.arenaSize / 2,
-  y: CONFIG.ballRadius + 100,
+// x, y = 네모의 왼쪽 위 모서리
+const box = {
+  x: (CONFIG.arenaSize - CONFIG.boxW) / 2,
+  y: 100,
   vx: CONFIG.startSpeedX,
   vy: 0,
-  r: CONFIG.ballRadius,
+  w: CONFIG.boxW,
+  h: CONFIG.boxH,
 };
 
 function step(dt) {
   const S = CONFIG.arenaSize;
 
   // 중력
-  ball.vy += CONFIG.gravity * dt;
-  ball.x += ball.vx * dt;
-  ball.y += ball.vy * dt;
+  box.vy += CONFIG.gravity * dt;
+  box.x += box.vx * dt;
+  box.y += box.vy * dt;
 
   // 좌우 벽: 속도 방향만 반전
-  if (ball.x - ball.r < 0)  { ball.x = ball.r;     ball.vx =  Math.abs(ball.vx); }
-  if (ball.x + ball.r > S)  { ball.x = S - ball.r; ball.vx = -Math.abs(ball.vx); }
+  if (box.x < 0)           { box.x = 0;           box.vx =  Math.abs(box.vx); }
+  if (box.x + box.w > S)   { box.x = S - box.w;   box.vx = -Math.abs(box.vx); }
 
   // 천장
-  if (ball.y - ball.r < 0)  { ball.y = ball.r; ball.vy = Math.abs(ball.vy); }
+  if (box.y < 0)           { box.y = 0;           box.vy =  Math.abs(box.vy); }
 
   // 바닥: 항상 같은 속도로 튕김 -> 튕기는 높이 일정
-  if (ball.y + ball.r > S)  { ball.y = S - ball.r; ball.vy = -BOUNCE_SPEED; }
+  if (box.y + box.h > S)   { box.y = S - box.h;   box.vy = -BOUNCE_SPEED; }
 }
 
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-  ctx.clip();
   if (imgLoaded) {
-    ctx.drawImage(img, ball.x - ball.r, ball.y - ball.r, ball.r * 2, ball.r * 2);
+    ctx.drawImage(img, box.x, box.y, box.w, box.h);
   } else {
     ctx.fillStyle = "#ff5c8a";
-    ctx.fillRect(ball.x - ball.r, ball.y - ball.r, ball.r * 2, ball.r * 2);
+    ctx.fillRect(box.x, box.y, box.w, box.h);
   }
-  ctx.restore();
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  ctx.lineWidth = 4;
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
 }
 
 // 고정 시간 간격으로 물리 계산 (프레임 속도와 상관없이 일정하게 동작)
