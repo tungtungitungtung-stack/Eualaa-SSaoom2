@@ -97,12 +97,11 @@ function reset() {
 function spawn(typeKey, side) {
   if (over || chars.length >= CONFIG.maxCharacters) return;
   const t = TYPES[typeKey], S = CONFIG.arenaSize;
-  const jitter = Math.random() * 300;
   const id = nextId++;
   chars.push({
     id, type: t, name: t.name + " " + id,
-    x: side === "left" ? 40 + jitter : S - t.w - 40 - jitter,
-    y: 60 + Math.random() * 400,
+    x: Math.random() * (S - t.w),      // 경기장 안 어디든 랜덤
+    y: Math.random() * (S - t.h),
     vx: (side === "left" ? 1 : -1) * CONFIG.startSpeedX,
     vy: 0, w: t.w, h: t.h,
     hp: t.hp, alive: true,
@@ -112,6 +111,7 @@ function spawn(typeKey, side) {
     rageCd: t.rageInterval,
     rage: null,
     djText: 0,
+    flash: 0,             // 풍선이 적중했을 때 깜빡임
   });
   peak = Math.max(peak, chars.length);
   syncUI();
@@ -201,6 +201,7 @@ function step(dt) {
         const crit = Math.random() < t.critChance;
         hurt(o, crit ? t.hitDamage * t.critMult : t.hitDamage, "balloon", crit);
         c.hitCd[o.id] = t.hitInterval;
+        c.flash = 0.3;
       }
     }
 
@@ -236,7 +237,7 @@ function updateFx(dt) {
   effects = effects.filter(e => e.t < e.dur);
   for (const f of floaters) { f.t += dt; f.y -= 120 * dt; }
   floaters = floaters.filter(f => f.t < 1.0);
-  for (const c of chars) if (c.djText > 0) c.djText -= dt;
+  for (const c of chars) { if (c.djText > 0) c.djText -= dt; if (c.flash > 0) c.flash -= dt; }
   if (shake > 0) shake -= dt;
 }
 
@@ -288,6 +289,15 @@ function draw() {
   // 캐릭터
   for (const c of chars) {
     if (imgLoaded) ctx.drawImage(img, c.x, c.y, c.w, c.h);
+
+    // 풍선 공격 범위 표시 (적중하면 빨갛게 굵어짐)
+    const bb = c.type.balloon;
+    ctx.save();
+    ctx.setLineDash([16, 10]);
+    ctx.lineWidth = c.flash > 0 ? 10 : 4;
+    ctx.strokeStyle = c.flash > 0 ? "#e11" : "rgba(230,120,0,0.8)";
+    ctx.strokeRect(c.x + c.w * bb.x, c.y + c.h * bb.y, c.w * bb.w, c.h * bb.h);
+    ctx.restore();
 
     const barH = 24;
     const by = Math.max(c.y - 40, 70);
