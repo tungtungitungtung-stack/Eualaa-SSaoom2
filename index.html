@@ -127,11 +127,11 @@ const TYPES = {
     desc: "대변해파리 소환 · 호빵 유도탄",
     // 능력1 대변해파리 호빵족: 일정 시간마다 대변해파리를 소환. 해파리는 똥물을 내뱉는다
     jellyInterval: 5,     // 소환 주기 (초)
-    jellyHp: 20,          // 대변해파리 체력
+    jellyHp: 30,          // 대변해파리 체력
     jellyW: 130, jellyH: 150,
     jellySpeed: 150,      // 대변해파리가 떠다니는 속도 (px/s)
     spitInterval: 1,      // 똥물 뱉는 간격 (초)
-    spitDamage: 1,        // 똥물 대미지
+    spitDamage: 3,        // 똥물 대미지
     spitSpeed: 1000,      // 똥물 속도 (px/s)
     // 능력2 호빵: 일정 시간마다 유도탄 호빵을 던진다
     bunInterval: 8,       // 투척 주기 (초)
@@ -304,14 +304,16 @@ function wave(c) {
   }
 }
 
-// 키보드 내리치기: 사거리 무한 -> 자신을 뺀 모든 캐릭터에게 대미지
+// 키보드 내리치기: 사거리 무한. 한 번에 키보드 한 개가 아무 적 한 명에게 떨어진다
 function slam(a) {
   const t = a.type;
+  const chars_ = chars.filter(o => o !== a && o.alive);
+  const pool = chars_.length ? chars_ : foesOf(a);     // 적 캐릭터가 우선, 없으면 소환수
+  if (!pool.length) return;
   shake = 0.3;
-  for (const o of foesOf(a)) {
-    effects.push({ kind: "kb", x: o.x + o.w / 2, y: o.y, t: 0, dur: 0.4 });
-    hurt(o, t.rageDamage, "rage", false);
-  }
+  const o = pool[Math.floor(Math.random() * pool.length)];
+  effects.push({ kind: "kb", x: o.x + o.w / 2, y: o.y, t: 0, dur: 0.4 });
+  hurt(o, t.rageDamage, "rage", false);
 }
 
 // 얼림: 얼어있는 동안 움직이지도, 공격하지도 못하고 동상 대미지를 받는다
