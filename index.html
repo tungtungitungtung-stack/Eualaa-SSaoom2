@@ -849,9 +849,8 @@ function pacoAct(c, dt) {
       }
       const dst = c.cols[to];
       const y0 = c.y, y1 = dst.bY - c.h;
-      // 회색 블록에 머리가 닿지 않는 높이까지만 뜀
-      const gMax = Math.max(col.gY, dst.gY);
-      const apex = Math.max(40, Math.min(t.jumpApex, Math.min(y0, y1) - gMax - 20));
+      // 회색 블록은 장식이므로 점프 경로를 막지 않음
+      const apex = Math.max(40, Math.min(t.jumpApex, Math.min(y0, y1) - 40));
       c.pj = { t: 0, to, x0: c.x, y0, x1: dst.x + dst.w / 2 - c.w / 2, y1, apex, down: false };
     }
   }
@@ -869,7 +868,8 @@ function pacoAct(c, dt) {
       }
     }
     if ((c.hitAt[o.id] || -9) + t.touchGap > time) continue;
-    const touching = rectsOverlap(c, o) || c.cols.some(k => rectsOverlap(k.gray, o) || rectsOverlap(k.black, o));
+    // 회색 블록은 장식 전용: 접촉 판정과 대미지 판정에서 제외
+    const touching = rectsOverlap(c, o) || c.cols.some(k => rectsOverlap(k.black, o));
     if (touching) { c.hitAt[o.id] = time; hurt(o, t.touchDamage, "touch", false); }
   }
 }
