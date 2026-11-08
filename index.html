@@ -801,7 +801,7 @@ function makePillars(c) {
   const t = c.type, S = CONFIG.arenaSize, W = t.pillarW;
   c.cols = [-1, 0, 1].map(k => {
     const x = S / 2 - W / 2 + k * t.pillarGap;                 // 경기장 중앙에 모여 있음
-    const gray = { owner: c, x, y: 0, w: W, h: 0, color: "#e4e4e4" };      // 윗부분이 경기장 위에 닿아 있음
+    const gray = { owner: c, x, y: 0, w: W, h: 0, color: "#e4e4e4", canCollide: false }; // 벽 모양은 유지하고 충돌만 비활성화
     const black = { owner: c, x, y: S, w: W, h: 0, color: "#111" };
     pillars.push(gray, black);
     return { x, w: W, gY: 0, bY: S, gray, black };
@@ -1551,6 +1551,7 @@ function draw() {
     ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
   }
 
+  // 회색 벽은 캐릭터보다 먼저 그려 뒤쪽에 보이게 함 (외형 유지, CanCollide=false)
   for (const p of pillars) drawPillar(p);
   if (timeStop) drawTimeStopBack();
 
