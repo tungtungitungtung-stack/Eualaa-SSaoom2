@@ -798,6 +798,10 @@ function pacoPlace(c, shaft) {                     // 해당 통로 안 랜덤 �
   c.shaft = shaft;
   c.x = L + Math.random() * (R - L - c.w);
   c.vx = (Math.random() < 0.5 ? -1 : 1) * t.hopSpeed;
+  // 검정 블록 위(회색과 검정이 만나는 높이)에 발을 딛고 시작
+  const wall = c.cols[Math.random() < 0.5 ? shaft : shaft + 1];
+  c.y = Math.min(CONFIG.arenaSize - c.h, wall.mY - c.h);
+  c.vy = 0;
 }
 
 function makePillars(c) {
@@ -813,8 +817,6 @@ function makePillars(c) {
   makeCourse(c);
   c.jumpCount = 0;
   pacoPlace(c, Math.floor(Math.random() * 2));
-  c.y = S - c.h - Math.random() * 400;
-  c.vy = 0;
 }
 
 function pacoAct(c, dt) {
