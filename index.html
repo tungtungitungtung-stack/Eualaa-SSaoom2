@@ -1325,25 +1325,14 @@ function drawShot(p) {
     ctx.beginPath(); ctx.ellipse(0, 0, p.r * sx * 0.6, p.r * 0.6, 0, 0, Math.PI * 2);
     ctx.lineWidth = 2; ctx.strokeStyle = "#c9971a"; ctx.stroke();
   } else if (p.kind === "x") {
-    const sk = p.owner.sport, r = p.r;
-    if (sk === "badminton") {                 // 셔틀콕: 코르크 머리 + 깃털
-      ctx.rotate(p.ang + Math.PI);            // 머리가 날아가는 방향을 향함
-      ctx.beginPath(); ctx.moveTo(-r * 0.1, -r * 0.3); ctx.lineTo(r * 1.6, -r * 1.0); ctx.lineTo(r * 1.6, r * 1.0); ctx.lineTo(-r * 0.1, r * 0.3); ctx.closePath();
-      ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#555"; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(r * 0.5, -r * 0.55); ctx.lineTo(r * 0.5, r * 0.55); ctx.moveTo(r * 1.0, -r * 0.8); ctx.lineTo(r * 1.0, r * 0.8);
-      ctx.lineWidth = 2; ctx.stroke();
-      ctx.beginPath(); ctx.arc(-r * 0.2, 0, r * 0.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#e0a96d"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#6b4a1f"; ctx.stroke();
-    } else if (sk === "table") {              // 탁구공
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#ff8a1f"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#a34d00"; ctx.stroke();
-      ctx.beginPath(); ctx.arc(-r * 0.3, -r * 0.3, r * 0.25, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fill();
-    } else {                                  // 기본 공
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#c6e03a"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#5a6b00"; ctx.stroke();
-      ctx.rotate(p.spin);
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.7, -0.8, 0.8); ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.stroke();
-    }
+    // 알파벳 X (스포츠에 따라 색이 바뀜). 빙글빙글 돌며 날아감
+    const col = { base: "#222", badminton: "#0a8f3c", table: "#ff7a00" }[p.owner.sport] || "#222";
+    ctx.rotate(p.spin * 0.6);
+    ctx.font = "900 " + Math.round(p.r * 3.2) + "px " + FONT;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    ctx.lineWidth = 8; ctx.strokeStyle = "#fff"; ctx.strokeText("X", 0, 0);
+    ctx.fillStyle = col; ctx.fillText("X", 0, 0);
+    ctx.textBaseline = "alphabetic";
   } else if (p.kind === "floor") {
     ctx.rotate(p.spin * 0.5);
     ctx.fillStyle = p.color; ctx.fillRect(-p.r, -p.r, p.r * 2, p.r * 2);
