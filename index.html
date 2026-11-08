@@ -178,7 +178,7 @@ const DOUBLE_JUMP_SPEED = Math.sqrt(2 * CONFIG.gravity * CONFIG.doubleJumpHeight
 // ===== 게임 상태 =====
 let chars = [], effects = [], floaters = [], minions = [], shots = [];
 let nextId = 1, nextMid = 1, peak = 0, time = 0, shake = 0;
-let running = false, over = false, winner = null, sudden = null;
+let running = false, over = false, winner = null, sudden = null, suddenNote = null;
 
 function syncUI() {
   startBtn.textContent = running ? "다시하기" : "시작";
@@ -189,7 +189,7 @@ function syncUI() {
 function reset() {
   chars = []; effects = []; floaters = []; minions = []; shots = [];
   nextId = 1; nextMid = 1; peak = 0; time = 0; shake = 0;
-  running = false; over = false; winner = null; sudden = null;
+  running = false; over = false; winner = null; sudden = null; suddenNote = null;
   stopRecording(true);
   clearReplay();
   syncUI();
@@ -594,20 +594,26 @@ function step(dt) {
   stepMinions(dt);
   stepShots(dt);
 
-  // 패시브 서든데스: 상대 체력이 기준 이하가 되면 체력 0으로 만들고 얼음밤이 승리
+  // 패시브 서든데스: 상대 체력이 기준 이하가 되면 그 캐릭터는 체력 0으로 죽는다.
+  //  - 1대 1(살아있는 캐릭터가 둘뿐)이면 얼음밤이 바로 승리하고 경기 끝
+  //  - 3명 이상이면 그 캐릭터만 죽고 경기는 계속
   for (const c of chars) {
     if (over) break;
     if (!c.alive || c.type.id !== "ice") continue;
     for (const o of chars) {
       if (o === c || !o.alive || o.hp > c.type.suddenHp) continue;
+      const aliveN = chars.filter(x => x.alive).length;
       o.hp = 0;
       o.alive = false;
       floaters.push({ x: o.x + o.w / 2, y: o.y + o.h * 0.3, text: "서든데스!", kind: "sudden", crit: false, t: 0 });
       c.msg = { text: "서든데스 발동!", t: 3 };
-      sudden = { by: c.name, victim: o.name };
       shake = 0.4;
-      endGame(c);
-      break;
+      if (aliveN <= 2) {
+        sudden = { by: c.name, victim: o.name };
+        endGame(c);
+        break;
+      }
+      suddenNote = { by: c.name, victim: o.name, t: 2.5 };   // 경기는 계속, 잠깐 안내만 띄움
     }
   }
 
@@ -629,6 +635,7 @@ function updateFx(dt) {
     if (c.msg) { c.msg.t -= dt; if (c.msg.t <= 0) c.msg = null; }
   }
   if (shake > 0) shake -= dt;
+  if (suddenNote) { suddenNote.t -= dt; if (suddenNote.t <= 0) suddenNote = null; }
 }
 
 // ===== 그리기 =====
@@ -946,6 +953,14 @@ function draw() {
                 : f.kind === "frost" ? "#0aa5d8" : f.kind === "sword" ? "#1f4fd6" : f.kind === "sudden" ? "#e11" : f.kind === "bun" ? "#d97a00" : f.kind === "spit" ? "#6b4a12" : "#000";
     ctx.globalAlpha = 1 - f.t;
     label(f.text, f.x, f.y, f.crit ? 76 : f.kind === "sudden" ? 90 : f.kind === "spit" ? 34 : 54, color, "#fff");
+    ctx.globalAlpha = 1;
+  }
+
+  // 서든데스 안내 (3명 이상일 때: 경기는 계속)
+  if (suddenNote && !over) {
+    ctx.globalAlpha = Math.min(1, suddenNote.t / 0.6);
+    label("⚡ 서든데스 발동!", S / 2, 240, 90, "#1f4fd6", "#fff");
+    label(suddenNote.victim + "의 체력이 " + TYPES.ice.suddenHp + " 이하 → 0!", S / 2, 320, 50, "#000", "#fff");
     ctx.globalAlpha = 1;
   }
 
