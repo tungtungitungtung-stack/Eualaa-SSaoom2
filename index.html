@@ -105,7 +105,7 @@ const TYPES = {
     desc: "회전 검 평타 · 서든데스 · 얼음밤(동상)",
     // 평타: 등뒤의 파란 검이 몸 중심을 축으로 빙글빙글 돈다
     hitDamage: 4,         // 검이 닿을 때마다 대미지
-    spinRps: 2,           // 1초에 도는 바퀴 수
+    spinRps: 1.8,           // 1초에 도는 바퀴 수
     swordInner: 110,      // 검 날이 시작되는 거리 (몸 중심 기준, px)
     swordTip: 305,        // 검 끝까지의 거리 (px)
     swordHalfW: 16,       // 날 두께의 절반 (px)
@@ -130,11 +130,11 @@ const TYPES = {
     jellyHp: 30,          // 대변해파리 체력
     jellyW: 130, jellyH: 150,
     jellySpeed: 150,      // 대변해파리가 떠다니는 속도 (px/s)
-    spitInterval: 1,      // 똥물 뱉는 간격 (초)
+    spitInterval: 0.8,      // 똥물 뱉는 간격 (초)
     spitDamage: 3,        // 똥물 대미지
     spitSpeed: 1000,      // 똥물 속도 (px/s)
     // 능력2 호빵: 일정 시간마다 유도탄 호빵을 던진다
-    bunInterval: 8,       // 투척 주기 (초)
+    bunInterval: 7,       // 투척 주기 (초)
     bunDamage: 32,        // 호빵 대미지
     bunCritChance: 0.25,  // 크리티컬 확률
     bunCritMult: 1.25,     // 크리티컬 배율
