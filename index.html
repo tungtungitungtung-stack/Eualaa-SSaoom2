@@ -113,6 +113,22 @@ const TYPES = {
     freezeTime: 4,        // 얼어있는 시간 = 동상 지속 시간 (초)
     frostDamage: 5,       // 동상 대미지
     frostInterval: 1,     // 동상 대미지 간격 (초)
+    // 능력 돌진: 일정 시간마다 가장 가까운 적을 향해 돌진 (검은 계속 돌며 대미지)
+    dashInterval: 5,      // 돌진 주기 (초)
+    dashSpeed: 2400,      // 돌진 속도 (px/s)
+  },
+  zodiac: {
+    id: "zodiac",
+    name: "조디악",
+    hp: 177,
+    w: 240, h: 330,
+    src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAFKCAYAAAAjc9I1AAAFKklEQVR42u3dMXLaUBRA0acMlWtqaFVD7zV4MS6yBBcsJmtIb2paq6amJRUTjwcbBJLQ0z+nzEwIyL55X0J8IgAAAAAAAACYksoh6N5ivjo6Cuc1+63fuQ79cghAwICAgTZmDkH/dn9/F/va6+c3vwAmMCBgEDAgYEDAIGBAwICAAQGDgAEBAwIGBAwCBgQMCBgEDAgYEDAQ9sSKSe8z1eV+W309LgLmmw3iTn92T3B9PS6W0Fy5u+Otuz/29bgIGBBwOXsrt52WfT0uAgYEDAIGBAwIOHw5WnT0JWp9PS4CBgRczhS+dUr29biEWyk5H1PX9yz39bgImAGnomgtoQEBAwIGAQMCBgQMCBgEDAgYEDAIGBAwIGDi6+6Qfe8QaQfK8Gkk+o2qfn7r5ZNDp3/HxwpNYCL/x/zEK2CSLHUtnQXMwNOwq+jOPY7pK2AGivieLzYTb7iIxbAR//R1oJcCvBS7eAXMgyK+d2ktXktokl4hFq8JzAi2mRWugEk8ja+JWbQCxk0fOAcGBAwCBgQMCBi4rHIIureYr46OwnnNfut3zgQGBAwCBgAAAACA6PhGjow3KzT7beUmiyjiZpGsv5/hbSQI7wMDAgYiwZY6L/VmdC/uz+415fOmjJ/zNc/bBAZLaEDAgIABAYOAAQEDAgYBAwIGBAwIGAQMCBgQMAjYIQABAwIGBAwCJgrZLwoBAwKm6+n78V6bwgIGBMzg0xcBk5xltIABAfOo5bMpLGBAwLh4hYAJF7MQMAgYy2cEjGU0AjZ9ETAgYMY3fS2jBQwImHAxCwFbPiNgQMBkmb6W0fnNHAI7SLb5d1/qjR+UgAX53USMB1zMamO5bv+fjOgFnNJLvZncRaY2r2W53olXwPkjPk2tUq4WL9c7k1fA04r4tPycesSmbrgKPe1pvBMvAhaxeLGEdl7sfFfAlHlebOpaQgs56ZJavCYwCZfUlswCJumS2tS1hCbpklq8AiZpxOK1hCbhebHzXQGT9LzY1LWEJumSWrwCBgRMxPAb19lqR8CAgAEBg4ApaeN258ECBgQMCBgETLbz33vu4HIeHO6FJh7+QYTS9qUWMJPaIbKkfakFzGR3iDSNBcxIz3+v/QRR22n88V7Hcv3q00kCZkwfujeNBUzyrW6cG4e3kXhMuF1+6H7q39lkAjOK898+96j6aUntPFjAJNjmxpJawExgZ0gXuARM8s3lTONwEYvbzn/HtDPk5wtc7os2gWkx/cb2fARsApMs3izPTcCAgAEBAwIGAQMCBgQMCBgEDAgYEDAIGBAwIGBAwCBgQMCAgAEBg4ABAQMCBgEDAgYEDAgYpqa69S8u5qtjthfb7LdVxudNGT/nZr+tTGCwhAYEDAAAAJH/baSsSnob6fPbEqW+7nARCxAwIGDgv1npB+DpaTGZ13I4NF63CQwIGBAwIGAQMCBgQMCAgEHAgIABAYOAAQEDAgYEDAIGBAwIGAQMCBgQMCBgEDAgYEDAgIBBwICAAQGDgAEBAwIGBAwCBgQMCBgQMAgYEDAgYBAwIGBAwICAQcCAgAEBg4ABAQMCBgQMAgYEDAgYEDAIGBAwIGAQMCBgQMCAgEHAgIABAQMCBgEDAgYEDAIGBAwIGBAwCBgQMCBgQMAgYEDAgIBBwICAAQEDAgYBAwIGBAwCBgQMCBgQMAgYEDAgYEDAIGBAwICAQcCAgAEBAwIGAQMCBgQMCBgEDAgYEDAIGEhjVvoBOBwarxsTGBAwIGAAAAAAAACAYv0DcZnHNdVCSN0AAAAASUVORK5CYII=",
+    desc: "4.5초마다 돌진해서 20대미지 (50%로 1.05배 크리티컬)",
+    dashInterval: 4.5,    // 돌진 주기 (초)
+    dashSpeed: 2600,      // 돌진 속도 (px/s)
+    dashDamage: 20,       // 돌진 대미지
+    critChance: 0.5,      // 크리티컬 확률
+    critMult: 1.05,       // 크리티컬 배율
   },
   howon: {
     id: "howon",
@@ -318,6 +334,8 @@ function spawn(typeKey, side) {
     // 얼음밤 전용
     swordAng: Math.random() * Math.PI * 2,
     iceCd: t.iceInterval || 0,
+    // 돌진 (얼음밤 / 조디악)
+    dashCd: t.dashInterval || 0, dash: null,
     // 호원 전용
     jellyCd: t.jellyInterval || 0,
     bunCd: t.bunInterval || 0,
@@ -526,7 +544,56 @@ function euaraaAct(c, prevVy, dt) {
 }
 
 // ----- 얼음밤 행동 -----
+// ===== 돌진: 가장 가까운 적 캐릭터 방향으로 곧게 달려감 =====
+function startDash(c) {
+  const t = c.type, cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+  const tg = nearestFoeChar(c, cx, cy);
+  if (!tg) return false;
+  const dx = tg.x + tg.w / 2 - cx, dy = tg.y + tg.h / 2 - cy, d = Math.hypot(dx, dy) || 1;
+  c.dash = {
+    t: 0, dur: Math.min(0.7, d / t.dashSpeed + 0.1), speed: t.dashSpeed,
+    dx: dx / d, dy: dy / d, vx0: c.vx, vy0: c.vy, target: tg,
+  };
+  c.dashCd = t.dashInterval;
+  c.msg = { text: "돌진!", t: 0.8 };
+  return true;
+}
+
+function stepDash(c, dt) {
+  const S = CONFIG.arenaSize, t = c.type, d = c.dash;
+  d.t += dt;
+  c.x += d.dx * d.speed * dt;
+  c.y += d.dy * d.speed * dt;
+  let end = d.t >= d.dur;
+  if (c.x < 0 || c.x + c.w > S || c.y < 0 || c.y + c.h > S) {
+    c.x = Math.max(0, Math.min(S - c.w, c.x)); c.y = Math.max(0, Math.min(S - c.h, c.y)); end = true;
+  }
+  for (const o of foesOf(c)) {
+    if (!rectsOverlap(c, o)) continue;
+    if (t.dashDamage) {                              // 조디악: 닿으면 대미지 (50%로 크리티컬)
+      const crit = Math.random() < t.critChance;
+      hurt(o, crit ? Math.round(t.dashDamage * t.critMult) : t.dashDamage, "dash", crit);
+      c.flash = 0.2;
+      shake = Math.max(shake, 0.2);
+    }
+    if (o === d.target || t.dashDamage) end = true;  // 목표(또는 처음 닿은 적)에게 닿으면 멈춤
+    break;
+  }
+  if (end) {
+    c.dash = null;
+    c.vx = d.vx0; c.vy = d.vy0;                      // 돌진 전의 움직임으로 돌아감
+  }
+}
+
+function dashTick(c, dt) {                           // 쿨타임이 되면 돌진 시작
+  c.dashCd -= dt;
+  if (c.dashCd <= 0 && !c.dash && !startDash(c)) c.dashCd = 0;
+}
+
+function zodiacAct(c, dt) { dashTick(c, dt); }
+
 function iceAct(c, dt) {
+  dashTick(c, dt);
   const t = c.type;
 
   // 평타: 검이 1초에 spinRps바퀴 돈다. 상대 몸에 닿을 때마다 대미지
@@ -1085,6 +1152,8 @@ function step(dt) {
     if (c.frozen || c.stunT > 0) {
       if (c.type.id === "hyunjami") c.peelCd = Math.max(0, c.peelCd - dt);
       if (c.type.id === "h2k") { c.sportCd = Math.max(0, c.sportCd - dt); c.xCd = Math.max(0, c.xCd - dt); }
+      c.dash = null;                                            // 얼면 돌진도 멈춤
+      if (c.type.dashInterval) c.dashCd = Math.max(0, c.dashCd - dt);
       if (c.type.rageInterval) c.rageCd = Math.max(0, c.rageCd - dt);   // 쿨타임은 계속 흐름
       if (c.type.id === "howon") { c.jellyCd = Math.max(0, c.jellyCd - dt); c.bunCd = Math.max(0, c.bunCd - dt); }
       if (c.type.id === "robloxer") c.floorCd = Math.max(0, c.floorCd - dt);
@@ -1097,6 +1166,11 @@ function step(dt) {
 
     // --- 이동 / 중력 ---
     const prevVy = c.vy;
+    if (c.dash) {                                    // 돌진 중: 중력 무시하고 곧게 이동
+      stepDash(c, dt);
+      if (c.type.id === "ice") iceAct(c, dt); else if (c.type.id === "zodiac") zodiacAct(c, dt);
+      continue;
+    }
     const mdt = c.slowT > 0 ? dt * SLOW_MUL : dt;     // 인간의 한계: 느려진 만큼 시간이 천천히 흐름
     c.vy += CONFIG.gravity * mdt;
     c.x += c.vx * mdt;
@@ -1119,6 +1193,7 @@ function step(dt) {
     else if (c.type.id === "robloxer") robloxerAct(c, dt);
     else if (c.type.id === "hyunjami") hyunjamiAct(c, dt);
     else if (c.type.id === "h2k") h2kAct(c, dt);
+    else if (c.type.id === "zodiac") zodiacAct(c, dt);
   }
 
   bumpChars();
