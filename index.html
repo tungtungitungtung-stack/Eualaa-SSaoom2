@@ -148,9 +148,10 @@ const TYPES = {
     cubeSpeed: 700, cubeGap: 0.4,
     shipDiv: 2,           // 보트: 대미지 = 누적 해골 수 / 2
     shipSpeed: 850, shipPush: 900, shipGap: 0.5,
-    ballDamage: 25,       // 볼: 위로 올라갔다 내려찍기
+    ballBase: 19, ballDiv: 20,   // 볼: 위로 올라갔다 내려찍기. 대미지 = 19 + (스터드가 입힌 총 대미지 / 20)
+    cubeMax: 40, shipMax: 30,    // 큐브 / 보트 대미지 최대치
     ballUp: 1700, ballDown: 2400, ballRise: 1.1,
-    waveSpeed: 1000, trailPx: 125, trailGap: 0.4,   // 웨이브: 흔적 125px당 1대미지
+    waveSpeed: 1000, trailPx: 200, trailGap: 0.4,   // 웨이브: 흔적 200px당 1대미지
   },
   siro: {
     id: "siro",
@@ -597,7 +598,9 @@ function hurt(target, amount, kind, crit, src) {
   }
   // 패시브 양산형 파워: 받는 대미지 10% 감소, 소수점은 반올림
   if (target.type && target.type.dmgReducePct) amount = Number.isInteger(amount) ? Math.round(amount * (100 - target.type.dmgReducePct) / 100) : Math.round(amount * (100 - target.type.dmgReducePct) / 10) / 10;
+  if (target.type && target.type.id === "sweet") amount = Math.round(amount * 1.2 * 100) / 100;   // 스위트 패시브: 모든 대미지를 20% 더 받음
   target.hp = Math.max(0, target.hp - amount);
+  if (src && src.type && src.type.id === "studd") src.dealt = (src.dealt || 0) + amount;          // 스터드가 입힌 총 대미지 (볼 대미지에 사용)
   floaters.push({
     x: target.x + target.w / 2 + (Math.random() - 0.5) * 120,
     y: target.y + target.h * 0.3,
@@ -914,7 +917,7 @@ function studdMove(c, dt) {                           // 변신 중 이동 + 공
     for (const o of foesOf(c)) {
       if (!rectsOverlap(c, o) || (g.hit.get(o) || -9) + t.cubeGap > time) continue;
       g.hit.set(o, time);
-      hurt(o, Math.max(1, Math.round(c.hp / t.cubeDiv)), "studd", true, c);
+      hurt(o, Math.min(t.cubeMax, Math.max(1, Math.round(c.hp / t.cubeDiv))), "studd", true, c);
       shake = Math.max(shake, 0.2);
     }
   } else if (g.mode === "ship") {                     // 보트: 상대를 밀침 (누적 해골 수 / 2)
@@ -929,7 +932,7 @@ function studdMove(c, dt) {                           // 변신 중 이동 + 공
       if (o.vx !== undefined && !o.frozen) { o.vx = ox / od * 500; }
       if ((g.hit.get(o) || -9) + t.shipGap > time) continue;
       g.hit.set(o, time);
-      hurt(o, Math.max(1, Math.round(c.skullTotal / t.shipDiv)), "studd", false, c);
+      hurt(o, Math.min(t.shipMax, Math.max(1, Math.round(c.skullTotal / t.shipDiv))), "studd", false, c);
     }
   } else if (g.mode === "ball") {                     // 볼: 위로 올라갔다가 내려가서 공격 (25)
     g.pt += dt;
@@ -943,7 +946,7 @@ function studdMove(c, dt) {                           // 변신 중 이동 + 공
       for (const o of foesOf(c)) {
         if (g.dive.has(o) || !rectsOverlap(c, o)) continue;
         g.dive.add(o);
-        hurt(o, t.ballDamage, "studd", true, c);
+        hurt(o, Math.round((t.ballBase + (c.dealt || 0) / t.ballDiv) * 100) / 100, "studd", true, c);
         shake = Math.max(shake, 0.25);
       }
       if (c.y + c.h >= S - 1) { c.y = S - c.h; g.phase = "up"; g.pt = 0; g.dive = new Set(); }
@@ -2423,6 +2426,7 @@ function draw() {
       if (c.master) tags.push(["÷4", "#6a1b9a"]);
       if (c.gd) tags.push([GD_NAMES[c.gd.mode] + " " + Math.max(0, c.type.gdTime - c.gd.t).toFixed(1) + "초", "#2457ff"]);
       if (c.type.id === "studd") tags.push(["누적 해골 " + c.skullTotal, "#444"]);
+      if (c.type.id === "studd") tags.push(["총 대미지 " + fmtHp(c.dealt || 0), "#444"]);
       if (c.dodged > 0) tags.push(["회피 누적 " + fmtHp(c.dodged), "#0a8f8f"]);
       if (c.dotT > 0) tags.push(["지속피해 " + c.dotT.toFixed(1) + "초", "#0aa5d8"]);
       tags.forEach((tg, i) => label(tg[0], c.x + c.w / 2, c.y + c.h * 0.45 + i * 36, 28, tg[1], "#fff"));
