@@ -26,6 +26,19 @@
   #pickerList { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
   .pick { min-width: 150px; padding: 16px 24px; font-size: 22px; }
   #replayVideo { max-width: 96vw; max-height: calc(100vh - 100px); border: 4px solid #000; background: #fff; }
+  body { touch-action: pan-y; }
+  #picker { z-index: 30; }
+  #teamSetup { position: fixed; inset: 0; z-index: 15; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; overflow: auto; padding: 12px; box-sizing: border-box; }
+  #teamSetup[hidden] { display: none; }
+  #teamTitle { font-size: 28px; font-weight: bold; }
+  #teamHint { font-size: 14px; text-align: center; }
+  .tcards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%; }
+  .tcard { border: 3px solid #000; border-radius: 12px; padding: 12px; width: min(92vw, 340px); display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
+  .tcard input { font-size: 20px; font-weight: bold; padding: 8px; border: 2px solid #000; border-radius: 8px; text-align: center; font-family: inherit; }
+  .trow { display: flex; gap: 6px; align-items: center; }
+  .trow .no { font-weight: bold; width: 26px; font-size: 20px; }
+  .trow .nm { flex: 1; font-size: 18px; font-weight: bold; }
+  .trow button { padding: 4px 10px; font-size: 14px; }
   #timer { font-size: 28px; font-weight: bold; font-variant-numeric: tabular-nums; color: #000; }
 </style>
 </head>
@@ -44,6 +57,7 @@
 </div>
 <div class="bar">
   <button id="addLeft">◀ 캐릭터 추가</button>
+  <button id="teamBtn">팀 모드 (옆으로 스와이프)</button>
   <button id="addRight">캐릭터 추가 ▶</button>
 </div>
 
@@ -51,6 +65,13 @@
   <div id="pickerTitle">추가할 캐릭터를 선택하세요</div>
   <div id="pickerList"></div>
   <button id="pickerCancel">취소</button>
+</div>
+
+<div id="teamSetup" hidden>
+  <div id="teamTitle">팀 모드</div>
+  <div id="teamHint">팀 이름을 입력하고, 한 팀에 1~3명을 넣으세요.<br>위에 있는 1번부터 출전하고, 쓰러지면 2번 → 3번 순서로 나옵니다. 3명이 모두 쓰러지면 패배!</div>
+  <div class="tcards" id="tcards"></div>
+  <div class="grp"><button id="teamStart">시작</button><button id="teamBack">← 일반 모드</button></div>
 </div>
 
 <div id="overlay" hidden>
@@ -422,10 +443,12 @@ let chars = [], effects = [], floaters = [], minions = [], shots = [], peels = [
 let timeStop = null;   // 노션의 거친면 소포체 중에는 모든 게 멈춤
 let nextId = 1, nextMid = 1, peak = 0, time = 0, shake = 0;
 let running = false, over = false, winner = null, sudden = null, suddenNote = null;
+let gameMode = "normal", teamState = null;           // 팀 모드 상태
+const teamCfg = [{ name: "1팀", members: [] }, { name: "2팀", members: [] }];
 
 function syncUI() {
   startBtn.textContent = running ? "다시하기" : "시작";
-  const full = over || chars.length >= CONFIG.maxCharacters;
+  const full = over || gameMode === "team" || chars.length >= CONFIG.maxCharacters;
   addBtns.forEach(b => { b.disabled = full; });
 }
 
@@ -981,6 +1004,51 @@ function studdMove(c, dt) {                           // 변신 중 이동 + 공
       endGd(c); return;                               // 상대가 대미지를 입으면 변신 끝
     }
   }
+}
+
+// ===== 팀 모드: 2팀, 한 팀 1~3명이 순서대로 한 명씩 출전 =====
+function teamSpawnNext(T, ti) {
+  const key = T.queue[T.idx];
+  const c = spawn(key, T.side);
+  if (!c) return;
+  c.team = ti; c.name = T.name + " " + TYPES[key].name + " (" + (T.idx + 1) + "번)";
+  T.active = c;
+}
+function startTeamBattle() {
+  teamSetup.hidden = true;
+  reset();
+  gameMode = "team";
+  teamState = teamCfg.map((cfg, i) => ({ name: (cfg.name || "").trim() || (i + 1) + "팀", queue: cfg.members.slice(), idx: 0, active: null, wait: 0, side: i ? "right" : "left" }));
+  teamState.forEach((T, i) => teamSpawnNext(T, i));
+  chars.forEach(randomDir);
+  running = true;
+  syncUI(); startRecording();
+}
+function teamTick(dt) {
+  if (over || !teamState) return;
+  teamState.forEach((T, ti) => {
+    if (T.active && !T.active.alive) { T.active = null; T.idx++; T.wait = 0.8; }     // 쓰러지면 다음 번호가 나옴
+    if (!T.active && T.idx < T.queue.length) { T.wait -= dt; if (T.wait <= 0) teamSpawnNext(T, ti); }
+  });
+  const lost = teamState.map(T => !T.active && T.idx >= T.queue.length);              // 3명 모두 쓰러지면 패배
+  if (lost[0] || lost[1]) endGame(lost[0] && lost[1] ? null : { name: teamState[lost[0] ? 1 : 0].name });
+}
+const TEAM_COLORS = ["#2457ff", "#e01b1b"];
+function drawTeamHud() {
+  const S = CONFIG.arenaSize;
+  teamState.forEach((T, ti) => {
+    const right = ti === 1, x = right ? S - 24 : 24;
+    ctx.save(); ctx.textAlign = right ? "right" : "left"; ctx.lineJoin = "round";
+    const put = (txt, y, size, fill) => {
+      ctx.font = "bold " + size + "px " + FONT; ctx.lineWidth = size / 6; ctx.strokeStyle = "#fff"; ctx.strokeText(txt, x, y); ctx.fillStyle = fill; ctx.fillText(txt, x, y);
+    };
+    put(T.name, 56, 52, TEAM_COLORS[ti]);
+    T.queue.forEach((key, i) => {
+      const dead = i < T.idx, cur = i === T.idx && T.active;
+      put((cur ? "▶ " : dead ? "✕ " : "   ") + (i + 1) + ". " + TYPES[key].name, 100 + i * 40, 32, dead ? "#aaa" : cur ? "#000" : "#555");
+    });
+    ctx.restore();
+  });
 }
 
 // ===== 시로: 더운 얼굴 이모지 투척 + 더운얼굴의 열기 =====
@@ -1814,7 +1882,7 @@ function step(dt) {
       floaters.push({ x: o.x + o.w / 2, y: o.y + o.h * 0.3, text: "서든데스!", kind: "sudden", crit: false, t: 0 });
       c.msg = { text: "서든데스 발동!", t: 3 };
       shake = 0.4;
-      if (aliveN <= 2) {
+      if (aliveN <= 2 && gameMode !== "team") {
         sudden = { by: c.name, victim: o.name };
         endGame(c);
         break;
@@ -1823,11 +1891,17 @@ function step(dt) {
     }
   }
 
+  // 스위트 본체가 쓰러지면 소환한 꼬마도 모두 사라짐
+  for (const k of chars) if (k.master && !k.master.alive && k.alive) {
+    k.hp = 0; k.alive = false;
+    effects.push({ kind: "puff", x: k.x + k.w / 2, y: k.y + k.h / 2, t: 0, dur: 0.5 });
+  }
   // 쓰러진 캐릭터 제거 + 승패 판정
   chars = chars.filter(c => c.alive);
   pillars = pillars.filter(p => p.owner.alive);     // 주인이 쓰러지면 블록도 사라짐
   minions = minions.filter(m => m.alive && m.owner.alive);   // 주인이 쓰러지면 소환수도 사라짐
-  if (peak >= 2 && new Set(chars.map(tm)).size <= 1 && !over) {
+  if (gameMode === "team") teamTick(dt);
+  else if (peak >= 2 && new Set(chars.map(tm)).size <= 1 && !over) {
     const w0 = chars[0] ? tm(chars[0]) : null;                  // 스위트 팀이 이기면 스위트가 우승 (스위트가 죽었으면 남은 소환수)
     endGame(w0 && w0.alive ? w0 : (chars[0] || null));
   }
@@ -2527,6 +2601,7 @@ function draw() {
     label("⚡ 서든데스 발동!", S / 2, S / 2 - 440, 110, "#1f4fd6", "#fff");
     label(sudden.victim + "의 체력이 " + TYPES.ice.suddenHp + " 이하 → 0!", S / 2, S / 2 - 340, 60, "#000", "#fff");
   }
+  if (gameMode === "team" && teamState) drawTeamHud();
   if (over) {
     label(winner ? winner.name + " 승리!" : "무승부!", S / 2, S / 2, 220, "#000", "#fff");
   }
@@ -2619,24 +2694,31 @@ downloadBtn.addEventListener("click", () => {
 
 // ===== 버튼 =====
 startBtn.addEventListener("click", () => {
-  if (running) reset();
+  if (running) {
+    const wasTeam = gameMode === "team";
+    reset(); gameMode = "normal"; teamState = null; syncUI();
+    if (wasTeam) showTeamSetup(true);                // 팀 모드는 다시하기를 누르면 팀 설정 화면으로
+  }
   else { running = true; chars.forEach(randomDir); syncUI(); startRecording(); }     // 시작할 때 모두 랜덤한 방향으로 출발
 });
 // ===== 캐릭터 선택 창: 추가 버튼을 누르면 캐릭터 목록이 뜨고, 하나를 고르면 소환 =====
 let pickSide = "left";
-function openPicker(side) {
-  if (over || chars.length >= CONFIG.maxCharacters) return;
-  pickSide = side;
+function openPickerCb(cb) {
   pickerList.innerHTML = "";
   for (const k in TYPES) {
     const t = TYPES[k];
     const b = document.createElement("button");
     b.className = "pick";
     b.textContent = t.name;
-    b.addEventListener("click", () => { spawn(k, pickSide); closePicker(); });
+    b.addEventListener("click", () => { closePicker(); cb(k); });
     pickerList.appendChild(b);
   }
   picker.hidden = false;
+}
+function openPicker(side) {
+  if (over || gameMode === "team" || chars.length >= CONFIG.maxCharacters) return;
+  pickSide = side;
+  openPickerCb(k => spawn(k, pickSide));
 }
 function closePicker() { picker.hidden = true; }
 addLeft.addEventListener("click", () => openPicker("left"));
@@ -2644,6 +2726,52 @@ addRight.addEventListener("click", () => openPicker("right"));
 pickerCancel.addEventListener("click", closePicker);
 picker.addEventListener("click", e => { if (e.target === picker) closePicker(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closePicker(); });
+// ===== 팀 설정 화면 (메인 화면에서 옆으로 스와이프하거나 버튼으로 열기) =====
+const teamSetup = document.getElementById("teamSetup"), tcards = document.getElementById("tcards");
+const teamStart = document.getElementById("teamStart"), teamBack = document.getElementById("teamBack"), teamBtn = document.getElementById("teamBtn");
+function renderTeamSetup() {
+  tcards.innerHTML = "";
+  teamCfg.forEach((cfg, ti) => {
+    const card = document.createElement("div"); card.className = "tcard"; card.style.borderColor = TEAM_COLORS[ti];
+    const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 10; inp.value = cfg.name; inp.placeholder = (ti + 1) + "팀 이름";
+    inp.addEventListener("input", () => { cfg.name = inp.value; });
+    card.appendChild(inp);
+    cfg.members.forEach((key, i) => {
+      const row = document.createElement("div"); row.className = "trow";
+      row.innerHTML = '<span class="no">' + (i + 1) + '</span><span class="nm"></span>';
+      row.querySelector(".nm").textContent = TYPES[key].name;
+      const mk = (txt, fn, dis) => { const b = document.createElement("button"); b.textContent = txt; b.disabled = !!dis; b.addEventListener("click", fn); row.appendChild(b); };
+      mk("▲", () => { [cfg.members[i - 1], cfg.members[i]] = [cfg.members[i], cfg.members[i - 1]]; renderTeamSetup(); }, i === 0);
+      mk("▼", () => { [cfg.members[i + 1], cfg.members[i]] = [cfg.members[i], cfg.members[i + 1]]; renderTeamSetup(); }, i === cfg.members.length - 1);
+      mk("✕", () => { cfg.members.splice(i, 1); renderTeamSetup(); });
+      card.appendChild(row);
+    });
+    if (cfg.members.length < 3) {
+      const add = document.createElement("button"); add.textContent = "+ 캐릭터 추가 (" + cfg.members.length + "/3)";
+      add.addEventListener("click", () => openPickerCb(k => { cfg.members.push(k); renderTeamSetup(); }));
+      card.appendChild(add);
+    }
+    tcards.appendChild(card);
+  });
+  teamStart.disabled = teamCfg.some(c => c.members.length < 1);
+}
+function showTeamSetup(on) {
+  if (on) renderTeamSetup();
+  teamSetup.hidden = !on;
+}
+teamBtn.addEventListener("click", () => { if (!running || over) showTeamSetup(true); });
+teamBack.addEventListener("click", () => showTeamSetup(false));
+teamStart.addEventListener("click", startTeamBattle);
+let swX = null, swY = null;                          // 옆으로 스와이프하면 팀 설정 화면 열기/닫기
+document.addEventListener("pointerdown", e => { swX = e.target.closest && e.target.closest("input,video,#picker,#overlay") ? null : e.clientX; swY = e.clientY; });
+document.addEventListener("pointerup", e => {
+  if (swX === null) return;
+  const dx = e.clientX - swX, dy = e.clientY - swY; swX = null;
+  if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 2 || !picker.hidden) return;
+  if (!teamSetup.hidden) showTeamSetup(false);
+  else if (!running || over) showTeamSetup(true);
+});
+
 syncUI();
 
 // ===== 메인 루프 (고정 시간 간격으로 물리 계산) =====
