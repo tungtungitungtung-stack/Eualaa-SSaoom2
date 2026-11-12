@@ -572,10 +572,13 @@ function rectsOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+function prefNormal(list) {                           // 타겟은 소환물(꼬마)이 아닌 일반 캐릭터가 우선, 없을 때만 꼬마
+  const normal = list.filter(o => !o.master);
+  return normal.length ? normal : list;
+}
 function nearestFoeChar(owner, x, y) {
   let best = null, bd = Infinity;
-  for (const o of chars) {
-    if (!isFoe(owner, o)) continue;
+  for (const o of prefNormal(chars.filter(o => isFoe(owner, o)))) {
     const d = Math.hypot(o.x + o.w / 2 - x, o.y + o.h / 2 - y);
     if (d < bd) { bd = d; best = o; }
   }
@@ -624,7 +627,7 @@ function wave(c) {
 // 키보드 내리치기: 사거리 무한. 한 번에 키보드 한 개가 아무 적 한 명에게 떨어진다
 function slam(a) {
   const t = a.type;
-  const chars_ = chars.filter(o => isFoe(a, o));
+  const chars_ = prefNormal(chars.filter(o => isFoe(a, o)));
   const pool = chars_.length ? chars_ : foesOf(a);     // 적 캐릭터가 우선, 없으면 소환수
   if (!pool.length) return;
   shake = 0.3;
@@ -1186,7 +1189,7 @@ function iceAct(c, dt) {
   // 능력 얼음밤: 7초마다 아무 적을 얼린다 (아직 안 얼어있는 적을 우선)
   c.iceCd -= dt;
   if (c.iceCd <= 0) {
-    const foes = chars.filter(o => isFoe(c, o));
+    const foes = prefNormal(chars.filter(o => isFoe(c, o)));
     if (foes.length) {
       const fresh = foes.filter(o => !o.frozen);
       const pool = fresh.length ? fresh : foes;
@@ -1318,7 +1321,7 @@ function stepFloorStop(dt) {
   const ts = timeStop, c = ts.caster, t = c.type;
   ts.t += dt;
   if (ts.t < t.floorStop) return;
-  const foes = chars.filter(o => isFoe(c, o));
+  const foes = prefNormal(chars.filter(o => isFoe(c, o)));
   const cx = c.x + c.w / 2, cy = c.y + c.h * 0.4;
   const first = foes.length ? foes[Math.floor(Math.random() * foes.length)] : null;
   const rest = foes.filter(o => o !== first);
