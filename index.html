@@ -129,7 +129,7 @@ const TYPES = {
     swordHalfW: 16,       // 날 두께의 절반 (px)
     touchGap: 0.1,        // 검이 상대에게서 떨어졌다가 다시 닿을 때 연속 적중을 막는 최소 간격 (초)
     // 패시브 서든데스: 상대 체력이 이 값 이하가 되면 즉사시키고 승리
-    suddenHp: 25,
+    suddenHp: 15,
     // 능력 얼음밤: 일정 시간마다 아무 적을 얼림 -> 동상
     iceInterval: 7,       // 능력 주기 (초)
     freezeTime: 4,        // 얼어있는 시간 = 동상 지속 시간 (초)
@@ -1875,7 +1875,7 @@ function step(dt) {
     if (over) break;
     if (!c.alive || c.type.id !== "ice") continue;
     for (const o of chars) {
-      if (!isFoe(c, o) || o.hp > c.type.suddenHp * (c.power || 1)) continue;
+      if (!isFoe(c, o) || o.master || o.hp > c.type.suddenHp * (c.power || 1)) continue;   // 일반 캐릭터만 (소환된 꼬마는 대상 아님)
       const aliveN = chars.filter(x => x.alive).length;
       o.hp = 0;
       o.alive = false;
