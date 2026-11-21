@@ -339,7 +339,8 @@ const TYPES = {
     orangeDamage: 10, chargeUp: 0.05, chargeMax: 0.9,        // 주황: 능력 충전속도 +5% / 번 (최대 90%) + 10대미지
     atkDown: 0.04, atkDownMax: 1,                             // 파랑: 공격력 -4% / 번 (최대 100%)
     barricadeInterval: 6, barricadeHp: 25, barricadeLen: 280, barricadeThick: 46, barricadeGap: 130, barricadeMax: 6,   // 바리케이드: 6초마다 상대 앞에 설치 (체력 25, 레늅이 죽으면 사라짐)
-    barricadeTouchDmg: 2, barricadeTouchGap: 0.5, barricadeShotDmg: 3,
+    barricadeTouchDmg: 2, barricadeTouchGap: 0.5, barricadeShotDmg: 3,   // 벽이 받는 대미지 (닿음 / 총알)
+    barricadeDmg: 1, barricadeLowHp: 5, barricadeLowDmg: 3,      // 벽에 닿은 상대가 받는 대미지 (벽 체력이 5 이하면 3)
     skyDot: 4, skyTime: 3,                                    // 하늘색: 3초 동안 1초마다 4대미지
   },
   zodiac: {
@@ -1666,71 +1667,81 @@ function lenubAct(c, dt) {
   }
 }
 
-// 능력2: 바리케이드. 상대가 가는 방향 앞에 벽을 세움 (체력 25, 레늅이 쓰러지면 사라짐)
+// 능력2: 바리케이드. 상대 앞(레늅 쪽)에 세우는데, 상대→레늅 방향과 직각으로 기울여서 날아오는 총알을 막음
 function placeBarricade(c, tg) {
   const t = c.type, S = CONFIG.arenaSize;
-  let dx = tg.vx || 0, dy = tg.vy || 0; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+  const lx = c.x + c.w / 2, ly = c.y + c.h / 2, fx = tg.x + tg.w / 2, fy = tg.y + tg.h / 2;
+  let nx = lx - fx, ny = ly - fy; const d = Math.hypot(nx, ny) || 1; nx /= d; ny /= d;   // 상대 → 레늅 방향 (총알이 오는 길)
   const gap = Math.max(tg.w, tg.h) / 2 + t.barricadeGap;
-  const px = tg.x + tg.w / 2 + dx * gap, py = tg.y + tg.h / 2 + dy * gap;
-  const vert = Math.abs(dx) >= Math.abs(dy);                 // 가는 방향과 직각으로 세움
-  const w = vert ? t.barricadeThick : t.barricadeLen, h = vert ? t.barricadeLen : t.barricadeThick;
-  const b = { owner: c, alive: true, hp: t.barricadeHp, maxHp: t.barricadeHp, w, h, hitT: 0, touch: new Map(),
-    x: Math.max(0, Math.min(S - w, px - w / 2)), y: Math.max(0, Math.min(S - h, py - h / 2)) };
+  const b = { owner: c, alive: true, hp: t.barricadeHp, maxHp: t.barricadeHp, len: t.barricadeLen, th: t.barricadeThick, hitT: 0, touch: new Map(),
+    nx, ny, cx: Math.max(0, Math.min(S, fx + nx * Math.min(gap, d * 0.6))), cy: Math.max(0, Math.min(S, fy + ny * Math.min(gap, d * 0.6))) };
   barricades.push(b);
   const mine = barricades.filter(o => o.owner === c && o.alive);
   for (let k = 0; k < mine.length - t.barricadeMax; k++) mine[k].alive = false;
-  effects.push({ kind: "puff", x: b.x + w / 2, y: b.y + h / 2, t: 0, dur: 0.4 });
+  effects.push({ kind: "puff", x: b.cx, y: b.cy, t: 0, dur: 0.4 });
   c.msg = { text: "바리케이드!", t: 1.0, color: "#e07000" };
 }
 function barricadeHurt(b, amount) {
   if (!b.alive) return;
   b.hp -= amount; b.hitT = 0.12;
-  floaters.push({ x: b.x + b.w / 2 + (Math.random() - 0.5) * 60, y: b.y + b.h / 2, text: String(amount), kind: "touch", crit: false, t: 0 });
+  floaters.push({ x: b.cx + (Math.random() - 0.5) * 60, y: b.cy, text: String(amount), kind: "touch", crit: false, t: 0 });
   sfx("hit", 0.2, false);
-  if (b.hp <= 0) { b.alive = false; effects.push({ kind: "puff", x: b.x + b.w / 2, y: b.y + b.h / 2, t: 0, dur: 0.5 }); }
+  if (b.hp <= 0) { b.alive = false; effects.push({ kind: "puff", x: b.cx, y: b.cy, t: 0, dur: 0.5 }); }
 }
 function stepBarricades(dt) {
   for (const b of barricades) {
     if (!b.alive) continue;
     if (!b.owner.alive) { b.alive = false; continue; }
     b.hitT = Math.max(0, b.hitT - dt);
-    for (const o of chars) {                                // 적은 벽을 통과하지 못하고 튕김
+    const t = b.owner.type, tx = -b.ny, ty = b.nx, hl = b.len / 2, ht = b.th / 2;     // n = 벽의 법선, (tx,ty) = 벽이 뻗은 방향
+    for (const o of chars) {                                // 적은 벽을 통과하지 못하고 튕김 (SAT: 사각형 vs 기울어진 벽)
       if (!b.alive || !o.alive || !isFoe(b.owner, o) || o.dash) continue;
-      const ox = Math.min(o.x + o.w, b.x + b.w) - Math.max(o.x, b.x), oy = Math.min(o.y + o.h, b.y + b.h) - Math.max(o.y, b.y);
-      if (ox <= 0 || oy <= 0) continue;
-      if (ox < oy) {
-        const left = o.x + o.w / 2 < b.x + b.w / 2;
-        o.x += left ? -ox : ox; o.vx = left ? -Math.abs(o.vx) : Math.abs(o.vx); o.kbx = 0;
-      } else {
-        const up = o.y + o.h / 2 < b.y + b.h / 2;
-        o.y += up ? -oy : oy; o.vy = up ? -Math.abs(o.vy) : Math.abs(o.vy); o.kby = 0;
+      const ocx = o.x + o.w / 2, ocy = o.y + o.h / 2, dx = ocx - b.cx, dy = ocy - b.cy;
+      const axes = [[1, 0, o.w / 2, hl * Math.abs(tx) + ht * Math.abs(b.nx)], [0, 1, o.h / 2, hl * Math.abs(ty) + ht * Math.abs(b.ny)],
+        [b.nx, b.ny, o.w / 2 * Math.abs(b.nx) + o.h / 2 * Math.abs(b.ny), ht], [tx, ty, o.w / 2 * Math.abs(tx) + o.h / 2 * Math.abs(ty), hl]];
+      let best = Infinity, bx = 0, by = 0;
+      for (const [ax, ay, ra, rb] of axes) {
+        const dist = dx * ax + dy * ay, ov = ra + rb - Math.abs(dist);
+        if (ov <= 0) { best = -1; break; }
+        if (ov < best) { best = ov; const sg = dist >= 0 ? 1 : -1; bx = ax * sg; by = ay * sg; }
       }
-      if ((b.touch.get(o) || -9) + b.owner.type.barricadeTouchGap <= time) { b.touch.set(o, time); barricadeHurt(b, b.owner.type.barricadeTouchDmg); }
+      if (best <= 0) continue;
+      o.x += bx * best; o.y += by * best; o.kbx = o.kby = 0;
+      const vn = o.vx * bx + o.vy * by;
+      if (vn < 0) { o.vx -= 2 * vn * bx; o.vy -= 2 * vn * by; }      // 벽에 반사
+      if ((b.touch.get(o) || -9) + t.barricadeTouchGap <= time) {
+        b.touch.set(o, time);
+        hurt(o, b.hp <= t.barricadeLowHp ? t.barricadeLowDmg : t.barricadeDmg, "touch", false, b.owner);   // 닿은 상대에게 대미지 (체력이 낮으면 더 아픔)
+        barricadeHurt(b, t.barricadeTouchDmg);
+      }
     }
     for (const p of shots) {                                // 적의 발사체는 벽에 막힘 (X는 튕겨 돌아감)
       if (!b.alive) break;
       if (!p.alive || p.out || p.back || !p.owner || !isFoe(b.owner, p.owner)) continue;
-      const r = p.r || 10;
-      const nx = Math.max(b.x, Math.min(p.x, b.x + b.w)), ny = Math.max(b.y, Math.min(p.y, b.y + b.h));
-      if ((p.x - nx) ** 2 + (p.y - ny) ** 2 > r * r) continue;
+      const r = p.r || 10, px = p.x - b.cx, py = p.y - b.cy;
+      const u = px * b.nx + py * b.ny, v = px * tx + py * ty;
+      const cu = Math.max(-ht, Math.min(ht, u)), cv = Math.max(-hl, Math.min(hl, v));
+      if ((u - cu) ** 2 + (v - cv) ** 2 > r * r) continue;
       if (p.kind === "x") p.back = true; else p.alive = false;
-      barricadeHurt(b, b.owner.type.barricadeShotDmg);
+      barricadeHurt(b, t.barricadeShotDmg);
     }
   }
   barricades = barricades.filter(b => b.alive);
 }
 function drawBarricade(b) {
   ctx.save();
-  ctx.fillStyle = b.hitT > 0 ? "#fff" : "#f2a33a"; ctx.fillRect(b.x, b.y, b.w, b.h);
-  ctx.beginPath(); ctx.rect(b.x, b.y, b.w, b.h); ctx.clip();
+  ctx.translate(b.cx, b.cy); ctx.rotate(Math.atan2(b.ny, b.nx));    // x축 = 벽의 법선, 긴 변은 y축
+  const w = b.th, h = b.len;
+  ctx.fillStyle = b.hitT > 0 ? "#fff" : "#f2a33a"; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.save(); ctx.beginPath(); ctx.rect(-w / 2, -h / 2, w, h); ctx.clip();
   ctx.fillStyle = "#222";                                   // 공사장 줄무늬
-  const L = b.w + b.h;
-  for (let k = -L; k < L; k += 44) { ctx.beginPath(); ctx.moveTo(b.x + k, b.y + b.h); ctx.lineTo(b.x + k + 22, b.y + b.h); ctx.lineTo(b.x + k + 22 + b.h, b.y); ctx.lineTo(b.x + k + b.h, b.y); ctx.fill(); }
+  for (let k = -h; k < h; k += 44) { ctx.beginPath(); ctx.moveTo(-w / 2, k); ctx.lineTo(-w / 2, k + 22); ctx.lineTo(w / 2, k + 22 + w); ctx.lineTo(w / 2, k + w); ctx.fill(); }
   ctx.restore();
-  ctx.lineWidth = 5; ctx.strokeStyle = "#000"; ctx.strokeRect(b.x, b.y, b.w, b.h);
-  const bw = Math.max(b.w, b.h) * 0.8, bx = b.x + b.w / 2 - bw / 2, by = b.y - 16;      // 체력 바
+  ctx.lineWidth = 5; ctx.strokeStyle = "#000"; ctx.strokeRect(-w / 2, -h / 2, w, h);
+  ctx.restore();
+  const bw = 120, bx = b.cx - bw / 2, by = b.cy - 14;       // 체력 바 (몸체 위에 똑바로)
   ctx.fillStyle = "#000"; ctx.fillRect(bx - 3, by - 3, bw + 6, 14);
-  ctx.fillStyle = "#e33"; ctx.fillRect(bx, by, bw * Math.max(0, b.hp / b.maxHp), 8);
+  ctx.fillStyle = b.hp <= b.owner.type.barricadeLowHp ? "#e11" : "#4c4"; ctx.fillRect(bx, by, bw * Math.max(0, b.hp / b.maxHp), 8);
 }
 
 function lsqHit(o, p) {
@@ -3383,8 +3394,8 @@ const GUIDE = {
     desc: "공격을 피하면서 같은 대미지를 되돌려 줍니다. 하지만 회피에 실패하면 그동안 피했던 대미지가 한꺼번에 들어옵니다.",
   }),
   lenub: t => ({
-    stats: [["체력", t.hp], ["스피너 평타", t.hitDamage + "대미지 (크리티컬 " + pct(t.hitCritChance) + ", ×" + t.hitCritMult + ")"], ["바리케이드", t.barricadeInterval + "초마다 상대 앞에 설치 · 체력 " + t.barricadeHp + " · 레늅이 쓰러지면 사라짐"], ["네모 발사", t.sqInterval + "초마다 3가지 중 하나 (각 1/3)"], ["주황 네모", t.orangeDamage + "대미지 + 능력 충전속도 +" + pct(t.chargeUp) + " (최대 " + pct(t.chargeMax) + ")"], ["파랑 네모", "공격력 -" + pct(t.atkDown) + " (최대 " + pct(t.atkDownMax) + ")"], ["하늘색 네모", t.skyTime + "초간 1초마다 " + t.skyDot + "대미지"]],
-    desc: "몸 주위를 도는 스피너로 공격하고, 상대 앞에 바리케이드를 세워 길을 막고, 유도되는 색깔 네모를 쏩니다. 맞은 적은 능력이 빨리 충전되거나, 공격력이 깎이거나, 지속 대미지를 받습니다.",
+    stats: [["체력", t.hp], ["스피너 평타", t.hitDamage + "대미지 (크리티컬 " + pct(t.hitCritChance) + ", ×" + t.hitCritMult + ")"], ["바리케이드", t.barricadeInterval + "초마다 상대 앞에 설치 · 체력 " + t.barricadeHp + " · 총알 막는 각도 · 닿은 상대 " + t.barricadeDmg + "대미지 (벽 체력 " + t.barricadeLowHp + " 이하면 " + t.barricadeLowDmg + ") · 레늅이 쓰러지면 사라짐"], ["네모 발사", t.sqInterval + "초마다 3가지 중 하나 (각 1/3)"], ["주황 네모", t.orangeDamage + "대미지 + 능력 충전속도 +" + pct(t.chargeUp) + " (최대 " + pct(t.chargeMax) + ")"], ["파랑 네모", "공격력 -" + pct(t.atkDown) + " (최대 " + pct(t.atkDownMax) + ")"], ["하늘색 네모", t.skyTime + "초간 1초마다 " + t.skyDot + "대미지"]],
+    desc: "몸 주위를 도는 스피너로 공격하고, 상대 앞에 총알을 막는 각도로 바리케이드를 세우고(닿은 상대는 대미지), 유도되는 색깔 네모를 쏩니다. 맞은 적은 능력이 빨리 충전되거나, 공격력이 깎이거나, 지속 대미지를 받습니다.",
   }),
   zodiac: t => ({
     stats: [["체력", t.hp], ["평타", "닿을 때마다 " + t.contactDamage + "대미지"], ["눈레이저", t.laserInterval + "초마다 " + t.laserDuration + "초간 · " + t.laserDamage + "대미지 (" + t.laserGap + "초 쿨다운)"], ["Tower of Raging Tempest", t.towerInterval + "초마다 내려찍기"], ["정통", t.towerDirect + "대미지 (크리티컬 " + pct(t.towerCrit) + ", ×" + t.towerMult + ")"], ["파동", t.towerWave + "대미지 · 반경 " + t.towerRadius]],
